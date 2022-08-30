@@ -92,7 +92,7 @@ function init() {
 
 //MODELS 
 //LOADING MODELS GIVES US SOME LAG ON START
-
+/*
   function loadModel(url) {
     return new Promise(resolve => {
       new GLTFLoader().load(url, resolve);
@@ -125,7 +125,7 @@ function init() {
     //continue the process
     //render();
   });
-
+*/
 }
 let paused = false;
 let timeAdd;
@@ -202,18 +202,18 @@ const moveForward = new TWEEN.Tween({ x: 0.5, y: 0.5, z: -2.5 })
     boxMesh.position.z = coords.z;
   })
   .delay(1000)
-  .repeat(Infinity)
-  .yoyo(true);
+  //.repeat(Infinity)
+  //.yoyo(true);
 
-/*const moveBackward = new TWEEN.Tween({x: 4.5, y: 0.5, z: -2.5})
-  .to({ x: 0.5, y: 0.5, z: -2.5 }, 2000)
+const moveBackward = new TWEEN.Tween({x: 4.5, y: 0.5, z: -2.5})
+  .to({ x: 4.5, y: 0.5, z: 2.5 }, 2000)
   .onUpdate((coords) => {
     boxMesh.position.x = coords.x;
     boxMesh.position.y = coords.y;
     boxMesh.position.z = coords.z;
   });
 moveForward.chain(moveBackward);
-moveBackward.chain(moveForward);*/
+moveBackward.chain(moveForward);
 
 moveForward.start();
 
