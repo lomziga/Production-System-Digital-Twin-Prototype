@@ -90,9 +90,8 @@ function init() {
     //render();
   });
 
-/*
 //MODELS 
-LOADING MODELS GIVES US SOME LAG ON START
+//LOADING MODELS GIVES US SOME LAG ON START
 
   function loadModel(url) {
     return new Promise(resolve => {
@@ -119,15 +118,13 @@ LOADING MODELS GIVES US SOME LAG ON START
     model3.scale.set(1, 1, 1);
 
     //add model to the scene
-    //scene.add(model1);
-    //scene.add(model2);
-    //scene.add(model3);
+    scene.add(model1);
+    scene.add(model2);
+    scene.add(model3);
 
     //continue the process
     //render();
   });
-
-*/
 
 }
 let paused = false;
