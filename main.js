@@ -145,7 +145,7 @@ btnPause.addEventListener("click", play);
 var btnStep = document.getElementById("btnStep");
 btnStep.addEventListener("click", step);
 
-//animate movement
+//create box
 const boxGeometry = new THREE.BoxGeometry(1, 1, 1);
 const boxMaterial = new THREE.MeshNormalMaterial();
 const boxMesh = new THREE.Mesh(boxGeometry, boxMaterial);
