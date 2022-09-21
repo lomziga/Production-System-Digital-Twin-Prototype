@@ -23,7 +23,8 @@ render();
 function init() {
   //Kamera
   camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 10000);
-  camera.position.set(5, 8, 13);
+  camera.position.set(0, -8, 11);
+  camera.up = new THREE.Vector3(0,0,1);
   camera.lookAt(0, 0, 0);
 
   scene = new THREE.Scene();
@@ -35,7 +36,8 @@ function init() {
   raycaster = new THREE.Raycaster();
   pointer = new THREE.Vector2();
   const geometry = new THREE.PlaneGeometry(10, 10);
-  geometry.rotateX(- Math.PI / 2);
+  gridHelper.rotation.x=Math.PI/2;
+  //geometry.rotateX(- Math.PI / 2);
   plane = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ visible: false }));
   scene.add(plane);
   objects.push(plane);
@@ -46,12 +48,14 @@ function init() {
   const directionalLight = new THREE.DirectionalLight(0xffffff);
   directionalLight.position.set(1, 0.75, 0.5).normalize();
   scene.add(directionalLight);
-  //document.addEventListener('pointermove', onPointerMove);
-  //document.addEventListener('pointerdown', onPointerDown);
+
+  //Renderer
   renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(window.devicePixelRatio);
   renderer.setSize(window.innerWidth, window.innerHeight);
   document.body.appendChild(renderer.domElement);
+
+  //Orbit controls za možnost obračanja okolja
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.target.set(0, 0, 0);
   controls.update();
@@ -79,9 +83,9 @@ function init() {
 
     // make shape ( N.B. edge view not visible )
     const text = new THREE.Mesh(geometry, matLite);
-    text.position.z = 5;
+    text.position.y = -5;
     text.position.x = 4.35;
-    text.rotation.x = 3 * Math.PI / 2;
+    //text.rotation.x = 3 * Math.PI / 2;
     scene.add(text);
   });
 
@@ -192,9 +196,9 @@ animate();
 
 //Premikanje objekta s Tween-i
 //Začetne koordinate
-const move1 = new TWEEN.Tween({ x: 0.5, y: 0.5, z: -2.5 })
+const move1 = new TWEEN.Tween({ x: 0.5, y: 0.5, z: 0.5 })
   //Končne koordinate in čas premika iz začetnih do končnih kooridant
-  .to({ x: 4.5, y: 0.5, z: -2.5 }, 2100)
+  .to({ x: 1.5, y: 0.5, z: 0.5 }, 1000)
   .onUpdate((coords) => {
     boxMesh.position.x = coords.x;
     boxMesh.position.y = coords.y;
@@ -203,14 +207,14 @@ const move1 = new TWEEN.Tween({ x: 0.5, y: 0.5, z: -2.5 })
   //.repeat(Infinity)
   //.yoyo(true);
 
-const move2 = new TWEEN.Tween({x: 4.5, y: 0.5, z: -2.5})
-  .to({ x: 4.5, y: 0.5, z: 2.5 }, 4000)
+const move2 = new TWEEN.Tween({x: 1.5, y: 0.5, z: 0.5})
+  .to({ x: 0.5, y: 0.5, z: 0.5 }, 1000)
   .onUpdate((coords) => {
     boxMesh.position.x = coords.x;
     boxMesh.position.y = coords.y;
     boxMesh.position.z = coords.z;
   })
-  .delay(3400);
+  //.delay(1000);
 
 move1.chain(move2);
 move2.chain(move1);
