@@ -14,7 +14,6 @@ import { EqualStencilFunc } from 'three';
 let camera, scene, renderer;
 let plane;
 let pointer, raycaster;
-let rollOverMesh, rollOverMaterial;
 
 const objects = [];
 
@@ -22,6 +21,7 @@ init();
 render();
 
 function init() {
+  //Kamera
   camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 10000);
   camera.position.set(5, 8, 13);
   camera.lookAt(0, 0, 0);
@@ -29,11 +29,7 @@ function init() {
   scene = new THREE.Scene();
   scene.background = new THREE.Color(0xf0f0f0);
 
-  // roll-over helpers
-  /*const rollOverGeo = new THREE.BoxGeometry(10, 10, 10);
-  rollOverMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000, opacity: 0.5, transparent: true });
-  rollOverMesh = new THREE.Mesh(rollOverGeo, rollOverMaterial);
-  scene.add(rollOverMesh);*/
+  //Mreža
   const gridHelper = new THREE.GridHelper(10, 10);
   scene.add(gridHelper);
   raycaster = new THREE.Raycaster();
@@ -44,7 +40,7 @@ function init() {
   scene.add(plane);
   objects.push(plane);
 
-  // lights
+  //Osvetljava
   const ambientLight = new THREE.AmbientLight(0xffffff);
   scene.add(ambientLight);
   const directionalLight = new THREE.DirectionalLight(0xffffff);
@@ -62,10 +58,10 @@ function init() {
   controls.addEventListener('change', render);
   window.addEventListener('resize', onWindowResize);
 
-  //Text
+  //Nalagalec fontov
   const loader = new FontLoader();
 
-  //1m text
+  //Napis "1m"
   loader.load('./node_modules/three/examples/fonts/helvetiker_regular.typeface.json', function (font) {
     const color = 0x002244;
     const matLite = new THREE.MeshBasicMaterial({
@@ -87,11 +83,10 @@ function init() {
     text.position.x = 4.35;
     text.rotation.x = 3 * Math.PI / 2;
     scene.add(text);
-    //render();
   });
 
-//MODELS 
-//LOADING MODELS GIVES US SOME LAG ON START
+//Modeli 
+//Modeli povzročijo nekaj lag-a na začetku
 /*
   function loadModel(url) {
     return new Promise(resolve => {
@@ -127,120 +122,109 @@ function init() {
   });
 */
 }
+
+var stepAmount = 10; //čas koraka v milisekundah
 let paused = false;
-let timeAdd;
+let stepMode = false;
+var timeSinceTimePaused = 0;
+var timePaused = 0;
+var recordedTime = 0;
+var recorded = false;
 
-function play(){
-  paused = !paused;
-  console.log(paused);
-}
-
-function step(){
-  timeAdd = timeAdd + 10;
-}
-
+//Stikala in njima pripadajoče funkcije
 var btnPause = document.getElementById("btnPause");
 btnPause.addEventListener("click", play);
 
 var btnStep = document.getElementById("btnStep");
 btnStep.addEventListener("click", step);
 
-//create box
+function play(){
+  stepMode = false;
+  paused = !paused;
+  console.log(paused);
+}
+
+function step(){
+  stepMode = true;
+  paused = true;
+  recordedTime += stepAmount;
+  timePaused += stepAmount;
+}
+
+//Ustvarjanje in dodajanje kocke
 const boxGeometry = new THREE.BoxGeometry(1, 1, 1);
 const boxMaterial = new THREE.MeshNormalMaterial();
 const boxMesh = new THREE.Mesh(boxGeometry, boxMaterial);
 scene.add(boxMesh);
 
-//keep track of time
-var timeSinceTimePaused = 0;
-var timePaused = 0;
-var recordedTime = 0;
-var recorded = false;
-
+//Funkcija s katero se izvaja animacija
 const animate = (time) => {
+  if(stepMode == false){
+    //v koračnem načinu se beleženja časa na izvaja (spodnja koda)
     if(paused == true){
       if(!recorded) {
+        //zabeleži kdaj smo pritisnili pavzo
         timePaused = time;
         recorded = true;
       }
-    } 
+    }
     else {
       if(recorded){
+        //če je čas pavze zabeležen
+        //izračuna koliko je minilo od pavze
         timeSinceTimePaused += time - timePaused;
         recorded = false;
       }
       recordedTime = (time - timeSinceTimePaused);
       TWEEN.update(recordedTime);
-   }
+    }
+  }
+  else{
+    TWEEN.update(recordedTime);
+  }
   window.requestAnimationFrame(animate);
-  
   document.getElementById("coords").innerHTML = "x: " + (boxMesh.position.x - 0.5).toFixed(2) + ", y: " + (boxMesh.position.y - 0.5).toFixed(2) + ", z: " + (boxMesh.position.z - 0.5).toFixed(2);
-  document.getElementById("time").innerHTML = "Time: " + (recordedTime / 1000).toFixed(2) + " Universal time: " + (time / 1000).toFixed(2);
+  document.getElementById("time").innerHTML = "Time: " + (recordedTime / 1000).toFixed(2) + "s";
   render();
 };
 
-/*//keep track of time
-const animate = (t) => {
-
-  TWEEN.update(t);
-  window.requestAnimationFrame(animate);
-  
-  document.getElementById("coords").innerHTML = "x: " + (boxMesh.position.x - 0.5).toFixed(2) + ", y: " + (boxMesh.position.y - 0.5).toFixed(2) + ", z: " + (boxMesh.position.z - 0.5).toFixed(2);
-  document.getElementById("time").innerHTML = "Time: " + (t / 1000).toFixed(2);
-  render();
-};*/
-
 animate();
 
-//starting point x: 0.5 to x: 4.5 in 4000 ms
-const moveForward = new TWEEN.Tween({ x: 0.5, y: 0.5, z: -2.5 })
-  .to({ x: 4.5, y: 0.5, z: -2.5 }, 2000)
-  
+//Premikanje objekta s Tween-i
+//Začetne koordinate
+const move1 = new TWEEN.Tween({ x: 0.5, y: 0.5, z: -2.5 })
+  //Končne koordinate in čas premika iz začetnih do končnih kooridant
+  .to({ x: 4.5, y: 0.5, z: -2.5 }, 2100)
   .onUpdate((coords) => {
     boxMesh.position.x = coords.x;
     boxMesh.position.y = coords.y;
     boxMesh.position.z = coords.z;
   })
-  .delay(1000)
   //.repeat(Infinity)
   //.yoyo(true);
 
-const moveBackward = new TWEEN.Tween({x: 4.5, y: 0.5, z: -2.5})
-  .to({ x: 4.5, y: 0.5, z: 2.5 }, 2000)
+const move2 = new TWEEN.Tween({x: 4.5, y: 0.5, z: -2.5})
+  .to({ x: 4.5, y: 0.5, z: 2.5 }, 4000)
   .onUpdate((coords) => {
     boxMesh.position.x = coords.x;
     boxMesh.position.y = coords.y;
     boxMesh.position.z = coords.z;
-  });
-moveForward.chain(moveBackward);
-moveBackward.chain(moveForward);
+  })
+  .delay(3400);
 
-moveForward.start();
+move1.chain(move2);
+move2.chain(move1);
+move1.start();
 
+//za ohranjanje velikosti v primeru da spremenimo velikost okna brskalnika
 function onWindowResize() {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
   render();
 }
-/*function onPointerMove(event) {
-  pointer.set((event.clientX / window.innerWidth) * 2 - 1, - (event.clientY / window.innerHeight) * 2 + 1);
-  raycaster.setFromCamera(pointer, camera);
-  const intersects = raycaster.intersectObjects(objects, false);
-  if (intersects.length > 0) {
-    const intersect = intersects[0];
-    rollOverMesh.position.copy(intersect.point).add(intersect.face.normal);
-    rollOverMesh.position.divideScalar(100).floor().multiplyScalar(100).addScalar(50);
-    render();
-  }
-}*/
 
-/*function onPointerDown(event) {
-  pointer.set((event.clientX / window.innerWidth) * 2 - 1, - (event.clientY / window.innerHeight) * 2 + 1);
-  raycaster.setFromCamera(pointer, camera);
-  const intersects = raycaster.intersectObjects(objects, false);
-}*/
-
+//izris
 function render() {
   renderer.render(scene, camera);
 }

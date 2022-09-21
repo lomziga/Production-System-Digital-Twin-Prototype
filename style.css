@@ -94,6 +94,12 @@ button {
 #btnStep{
   left: 140px;
 }
+#startButton{
+  left: 260px;
+}
+#stopButton{
+  left: 350px;
+}
 button:hover {
   border-color: #646cff;
 }
