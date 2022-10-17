@@ -1,23 +1,18 @@
 import './style.css'
 import * as THREE from 'three';
-import * as TWEEN from '@tweenjs/tween.js';
+import Stats from 'three/examples/jsm/libs/stats.module.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { FontLoader } from 'three/examples/jsm/loaders/FontLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { EqualStencilFunc } from 'three';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
-import Stats from 'three/examples/jsm/libs/stats.module.js';
 (function () { var script = document.createElement('script'); script.onload = function () { var stats = new Stats(); document.body.appendChild(stats.dom); requestAnimationFrame(function loop() { stats.update(); requestAnimationFrame(loop) }); }; script.src = './node_modules/three/examples/jsm/libs/stats.module.js'; document.head.appendChild(script); })()
 
-let camera, scene, renderer, plane, pointer, raycaster, model, skeleton, mixer, clock, panelSettings;
+//Dekleracije globalnih spremenljivk
+let renderer, scene, camera, mixer, clock, plane, panelSettings, clipAction, mixerPause;
 const objects = [];
-
 let singleStepMode = false;
 let sizeOfNextStep = 0;
-var speedScale = 1;
-
-init();
-render();
+let currentSpeed = 1;
 
 //GUI - Grafični uporabniški vmesnik
 const panel = new GUI({ width: 310 });
@@ -26,13 +21,24 @@ panelSettings = {
     'modify time scale': 1.0,
     'pause/continue': pauseContinue,
     'make single step': toSingleStepMode,
+    'modify step size': 0.001
 };
-panel.add(panelSettings, 'modify time scale', -2.0, 2.0, 0.1).onChange(modifyTimeScale);
+const timeScaleController = panel.add(panelSettings, 'modify time scale', -2.0, 2.0, 0.01).onChange(modifyTimeScale);
 folder1.add(panelSettings, 'pause/continue');
 folder1.add(panelSettings, 'make single step');
+folder1.add(panelSettings, 'modify step size', -0.1, 0.1, 0.0001);
+
+init();
+render();
+animate();
+pauseAllActions();
 
 //Inicilizacija
 function init() {
+    //Clock
+    //Object for keeping track of time. This uses performance.now if it is available, otherwise it reverts to the less accurate Date.now. 
+    clock = new THREE.Clock();
+
     //Renderer
     renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setPixelRatio(window.devicePixelRatio);
@@ -139,15 +145,92 @@ function init() {
         //render();
       });
     */
+
+    //Dodajanje kocke
+    const boxGeometry = new THREE.BoxGeometry(1, 1, 1);
+    const boxMaterial = new THREE.MeshNormalMaterial();
+    const cube = new THREE.Mesh(boxGeometry, boxMaterial);
+    const cube2 = new THREE.Mesh(boxGeometry, boxMaterial);
+    scene.add(cube);
+    scene.add(cube2);
+
+    // all objects of this animation group share a common animation state
+    const animationGroup = new THREE.AnimationObjectGroup();
+    animationGroup.add(cube);
+    animationGroup.add(cube2);
+    /*
+    */
+
+    //Mixer za animacije, keyframeTrack-i in clip-i
+    mixer = new THREE.AnimationMixer(animationGroup);
+
+    //VectorKeyframeTrack( name : String, times : Array, values : Array )
+    //name - (required) identifier for the KeyframeTrack.
+    //times - (required) array of keyframe times.
+    //values - values for the keyframes at the times specified, a flat array of vector components.
+    //interpolation - the type of interpolation to use. See Animation Constants for possible values. Default is InterpolateLinear.
+
+    //[time1, time2], [x1, y1, z1, x2, y2, z2]
+    //Objekt začne svoj premik iz x1, y1, z1 ob času time1
+    //Do x2, y2, z2 prispe ob času time2
+    const keyframeTrack = new THREE.VectorKeyframeTrack('.position',
+    [0, 1, 3, 4],
+    [-4.5, -4.5, 0,
+    0, -4.5, 0,
+    0, 4.5, 0,
+    4.5, 4.5, 0]);
+    
+    const clip = new THREE.AnimationClip('default', - 1, [keyframeTrack]);
+    clipAction = mixer.clipAction(clip);
+    clipAction.setLoop(THREE.LoopPingPong);
+    clipAction.play();
 }
 //Konec inicilizacije
 
-//Izris
-function render() {
-    renderer.render(scene, camera);
+//Funkcije za kontrolo časa
+function pauseContinue() {
+    //Če pritisnemo "pause/continue" in smo v koračnem načinu, se koračni način izklopi
+    if (singleStepMode) {
+        singleStepMode = false;
+        unPauseAllActions();
+        
+    } else {
+        //Ko pritisnemo "pause/continue" in nismo v koračnem načinu ter animacija ne teče, se ta vklopi, ter obratno
+        if (mixerPause == true) {
+            unPauseAllActions();
+        } else {
+            pauseAllActions();
+        }
+    }
+}
+//Nastavljanje časovnega razpona na 0 za ustavljanje animacije
+function pauseAllActions() {
+    mixerPause = true;
+    mixer.timeScale = 0;
+    timeScaleController.disable(true);
+}
+//Nastavljanje časovnega razpona na 1 za predvajanje animacije ali koračni način
+function unPauseAllActions() {
+    mixerPause = false;
+    mixer.timeScale = currentSpeed;
+    timeScaleController.disable(false);
+}
+//Preklop na koračni način
+function toSingleStepMode() {
+    unPauseAllActions();
+
+    singleStepMode = true;
+    sizeOfNextStep = panelSettings['modify step size'];
+
+    timeScaleController.disable(true);
+}
+//Modifikacija časovnega razpona
+function modifyTimeScale(speed) {
+    currentSpeed = speed;
+    mixer.timeScale = currentSpeed;
 }
 
-//Za ohranjanje velikosti v primeru da spremenimo velikost okna brskalnika
+//za ohranjanje velikosti v primeru da spremenimo velikost okna brskalnika
 function onWindowResize() {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
@@ -155,65 +238,36 @@ function onWindowResize() {
     render();
 }
 
-//Funkcije za kontrolo časa
-//Funkcija za prekinitev in nadaljevanje animacije
-function pauseContinue() {
-    paused = !paused;
-    animate();
+//Izris
+function render() {
+    renderer.render(scene, camera);
 }
-
-//Funkcija za izvedbo enega koraka animaicje. Velikost koraka je odvisna od časovnega razpona
-function toSingleStepMode() {
-    paused = false;
-    animate();
-    paused = true;
-}
-
-//Modifikacija časovnega razpona
-function modifyTimeScale(speed) {
-    speedScale = speed;
-}
-
-//Dodajanje kocke
-const boxGeometry = new THREE.BoxGeometry(1, 1, 1);
-const boxMaterial = new THREE.MeshNormalMaterial();
-const cube = new THREE.Mesh(boxGeometry, boxMaterial);
-
-scene.add(cube);
-mixer = new THREE.AnimationMixer(cube);
-
-document.getElementById("coords").innerHTML = "x: " + (cube.position.x).toFixed(2) + ", y: " + (cube.position.y).toFixed(2) + ", z: " + (cube.position.z).toFixed(2);
-render();
-
-let paused = true;
-let speed = 0.01; //Premik na časovno enoto 0.01m/s
-let positionX = 0;
-let counter = 0;
-let moveAmount;
-let direction = 1;
 
 //Funkcija za animiranje
 function animate() {
-    //V primeru pavze se koda pod spodnjo vrstico ne izvaja
-    if (paused) return;
     requestAnimationFrame(animate);
 
-    //Premiki kocke
-    if (cube.position.x > 2) {
-        direction = -direction;
-    }
-    if (cube.position.x < -2) {
-        direction = -direction;
-    }
-    moveAmount = speed * direction * speedScale;
-    positionX = positionX + moveAmount;
-    cube.position.x = positionX;
+    //.oldTime : Float
+    //Holds the time at which the clock's start, .getElapsedTime() or .getDelta() methods were last called.
+    //.getDelta () : Float
+    //Get the seconds passed since the time .oldTime was set and sets .oldTime to the current time.
 
-    //Posodabljanje števca časa
-    counter = counter + (1 * speedScale);
+    let mixerUpdateDelta = clock.getDelta();
 
-    document.getElementById("counter").innerHTML = counter.toFixed(2);
-    document.getElementById("coords").innerHTML = "x: " + (cube.position.x).toFixed(2) + ", y: " + (cube.position.y).toFixed(2) + ", z: " + (cube.position.z).toFixed(2);
-    
+    //Koračni način
+    if (singleStepMode) {
+        //Če smo v koračnem načinu se nastavi mixerUpdateDelta na uporabniško določeno velikost koraka
+        mixerUpdateDelta = sizeOfNextStep;
+
+        //Velikost koraka se ponastavi na 0, da se korakanje ustavi po enem koraku
+        sizeOfNextStep = 0;
+    }
+
+    //.update (deltaTimeInSeconds : Number) : this
+    //Advances the global mixer time and updates the animation.
+    mixer.update(mixerUpdateDelta);
+
+    //Izpis časa animacije. Čas je zaokrožen na 2 decimalki
+    document.getElementById("counter").innerHTML = mixer.time.toFixed(16);
     render();
 }
