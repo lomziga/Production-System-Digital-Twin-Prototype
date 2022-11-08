@@ -1,19 +1,15 @@
 import './style.css'
 import * as THREE from 'three';
-import * as TWEEN from '@tweenjs/tween.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { FontLoader } from 'three/examples/jsm/loaders/FontLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { EqualStencilFunc } from 'three';
 import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import Stats from 'three/examples/jsm/libs/stats.module.js';
 (function () { var script = document.createElement('script'); script.onload = function () { var stats = new Stats(); document.body.appendChild(stats.dom); requestAnimationFrame(function loop() { stats.update(); requestAnimationFrame(loop) }); }; script.src = './node_modules/three/examples/jsm/libs/stats.module.js'; document.head.appendChild(script); })()
 
-let camera, scene, renderer, plane, pointer, raycaster, model, skeleton, mixer, clock, panelSettings;
+let camera, scene, renderer, plane, panelSettings;
 const objects = [];
 
-let singleStepMode = false;
-let sizeOfNextStep = 0;
 var speedScale = 1;
 
 init();
@@ -27,7 +23,7 @@ panelSettings = {
     'pause/continue': pauseContinue,
     'make single step': toSingleStepMode,
 };
-panel.add(panelSettings, 'modify time scale', -2.0, 2.0, 0.1).onChange(modifyTimeScale);
+panel.add(panelSettings, 'modify time scale', -2, 2, 0.1).onFinishChange(modifyTimeScale);
 folder1.add(panelSettings, 'pause/continue');
 folder1.add(panelSettings, 'make single step');
 
@@ -51,7 +47,7 @@ function init() {
     scene.background = new THREE.Color(0xf0f0f0);
 
     //Osvetljava
-    const ambientLight = new THREE.AmbientLight(0xffffff);
+    const ambientLight = new THREE.AmbientLight(0x404040);
     scene.add(ambientLight);
     const directionalLight = new THREE.DirectionalLight(0xffffff);
     directionalLight.position.set(1, 0.75, 0.5).normalize();
@@ -103,6 +99,7 @@ function init() {
     scene.add(plane);
     objects.push(plane);
 
+    
     /*
     //Modeli 
     //Modeli povzročijo nekaj lag-a na začetku
@@ -174,23 +171,50 @@ function modifyTimeScale(speed) {
     speedScale = speed;
 }
 
-//Dodajanje kocke
-const boxGeometry = new THREE.BoxGeometry(1, 1, 1);
-const boxMaterial = new THREE.MeshNormalMaterial();
-const cube = new THREE.Mesh(boxGeometry, boxMaterial);
+//Dodajanje poti
+const path = new THREE.LineCurve3(
+	new THREE.Vector3( -5, 0, 0 ),
+	new THREE.Vector3( 5, 0, 0 )
+);
+const points = path.getPoints(50);
+const geometry = new THREE.BufferGeometry().setFromPoints(points);
+const material = new THREE.LineBasicMaterial( { color: 0xff0000 } );
+const pathObject = new THREE.Line( geometry, material );
+scene.add(pathObject);
 
-scene.add(cube);
-mixer = new THREE.AnimationMixer(cube);
+//Razred "Product", kateri deduje od razreda "Mesh"
+class Product extends THREE.Mesh{
+    constructor(x, y, productColor, weight, sizeX, sizeY, sizeZ){
+        super();
+        this.x = x;
+        this.y = y;
+        this.productColor = productColor
+        this.weight = weight;
+        this.sizeX = sizeX;
+        this.sizeY = sizeY;
+        this.sizeZ = sizeZ;
+        this.positionTime = 0;
+        this.moveAmount = 0;
+        this.geometry = new THREE.BoxGeometry(sizeX, sizeY, sizeZ);
+        this.material = new THREE.MeshStandardMaterial({color: productColor});
+    }
+    //Izračun položaja na poti v času
+    //Nevem zakaj je odstopanje pri "positionTime", zato zaokrožim
+    calculatePosition(){
+        this.moveAmount = (speed * speedScale) / path.getLength();
+        this.positionTime = (Math.round(this.positionTime * 1e5) / 1e5) + (Math.round(this.moveAmount * 1e5 ) / 1e5);
+        console.log(productArray[0].positionTime)
+        return this.positionTime;
+    }
+}
 
-document.getElementById("coords").innerHTML = "x: " + (cube.position.x).toFixed(2) + ", y: " + (cube.position.y).toFixed(2) + ", z: " + (cube.position.z).toFixed(2);
 render();
 
+let productArray = [];
 let paused = true;
 let speed = 0.01; //Premik na časovno enoto 0.01m/s
-let positionX = 0;
 let counter = 0;
-let moveAmount;
-let direction = 1;
+let spawnInterval = 200;
 
 //Funkcija za animiranje
 function animate() {
@@ -198,22 +222,40 @@ function animate() {
     if (paused) return;
     requestAnimationFrame(animate);
 
-    //Premiki kocke
-    if (cube.position.x > 2) {
-        direction = -direction;
+    //Dodajanje produktov
+    //Če je vrednost spremenljivke "counter", deljiva s spremenljivko "spawnInterval" je ustvarjen nov produkt.
+    //Z drugimi besedami: vsake "spawnInterval" časa se sceni doda nov produkt
+    //Potrebno dopolnit, ker se pri času z necelimi števili produkti ne pojavljajo
+    if(counter % spawnInterval === 0){
+        const product = new Product(-4.5, -4.5, "green", 40, 1, 1, 1);
+        scene.add(product);
+        productArray.push(product);
     }
-    if (cube.position.x < -2) {
-        direction = -direction;
+    
+    //Premiki produktov
+    for(var i = 0; i < productArray.length; i++){
+        var cubePosition = productArray[i].calculatePosition();
+        productArray[i].position.x = path.getPoint(cubePosition).x;
+        productArray[i].position.y = path.getPoint(cubePosition).y;
+        productArray[i].position.z = path.getPoint(cubePosition).z;
+        console.log(path.getLength());
+        console.log(productArray[0].moveAmount);
+        console.log(productArray[0].positionTime);
+
+        //Predmet je odstranjen iz table, ko prečka mejo
+        if(productArray[i].position.x > 5){
+            scene.remove(productArray[i]);
+            productArray.shift();
+        }
     }
-    moveAmount = speed * direction * speedScale;
-    positionX = positionX + moveAmount;
-    cube.position.x = positionX;
+
 
     //Posodabljanje števca časa
     counter = counter + (1 * speedScale);
-
+    //Izpis časa
     document.getElementById("counter").innerHTML = counter.toFixed(2);
-    document.getElementById("coords").innerHTML = "x: " + (cube.position.x).toFixed(2) + ", y: " + (cube.position.y).toFixed(2) + ", z: " + (cube.position.z).toFixed(2);
-    
+    /*
+    document.getElementById("coords").innerHTML = "x: " + (productArray[0].position.x).toFixed(2) + ", y: " + (productArray[0].position.y).toFixed(2) + ", z: " + (productArray[0].position.z).toFixed(2);
+    */
     render();
 }
