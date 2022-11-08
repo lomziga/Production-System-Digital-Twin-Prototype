@@ -80,7 +80,6 @@ function init() {
         const xMid = - 0.5 * (geometry.boundingBox.max.x - geometry.boundingBox.min.x);
         geometry.translate(xMid, 0, 0);
 
-        // make shape ( N.B. edge view not visible )
         const text = new THREE.Mesh(geometry, matLite);
         text.position.z = -0.5;
         text.position.y = -5.5;
@@ -98,44 +97,6 @@ function init() {
     plane = new THREE.Mesh(geometryPlane, new THREE.MeshBasicMaterial({ visible: false }));
     scene.add(plane);
     objects.push(plane);
-
-    
-    /*
-    //Modeli 
-    //Modeli povzročijo nekaj lag-a na začetku
-      function loadModel(url) {
-        return new Promise(resolve => {
-          new GLTFLoader().load(url, resolve);
-        });
-      }
-    
-      let model1, model2, model3;
-      let p1 = loadModel('./models/OldMetalDesk.glb').then(result => { model1 = result.scene.children[0]; });
-      let p2 = loadModel('./models/OldMetalDesk.glb').then(result => { model2 = result.scene.children[0]; });
-      let p3 = loadModel('./models/OldMetalDesk.glb').then(result => { model3 = result.scene.children[0]; });
-    
-      //if all Promises resolved 
-      Promise.all([p1, p2, p3]).then(() => {
-        //do something to the model
-        model1.position.set(0, 0.45, -1.5);
-        model1.scale.set(1, 1, 1);
-        model1.rotation.z = 3 * Math.PI / 2;
-    
-        model2.position.set(-1.5, 0.45, 0);
-        model2.scale.set(1, 1, 1);
-    
-        model3.position.set(-1.5, 0.45, 2);
-        model3.scale.set(1, 1, 1);
-    
-        //add model to the scene
-        scene.add(model1);
-        scene.add(model2);
-        scene.add(model3);
-    
-        //continue the process
-        //render();
-      });
-    */
 }
 //Konec inicilizacije
 

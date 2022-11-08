@@ -48,26 +48,6 @@ h1 {
     color: #1a1a1a;
 }
 
-#time {
-    position: absolute;
-    top: 40px;
-    width: 100%;
-    text-align: center;
-    z-index: 100;
-    display: block;
-    color: #1a1a1a;
-}
-
-#realTime {
-    position: absolute;
-    top: 100px;
-    width: 100%;
-    text-align: center;
-    z-index: 100;
-    display: block;
-    color: #1a1a1a;
-}
-
 #counter {
     position: absolute;
     top: 70px;
@@ -112,18 +92,6 @@ button {
     background-color: #1a1a1a;
     cursor: pointer;
     transition: border-color 0.25s;
-}
-
-#btnStep {
-    left: 140px;
-}
-
-#startButton {
-    left: 260px;
-}
-
-#stopButton {
-    left: 350px;
 }
 
 button:hover {
