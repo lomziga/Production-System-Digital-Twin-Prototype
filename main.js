@@ -16,7 +16,7 @@ init();
 render();
 
 //GUI - Grafični uporabniški vmesnik
-const panel = new GUI({ width: 310 });
+const panel = new GUI({width: 310});
 const folder1 = panel.addFolder('Pausing/Stepping');
 panelSettings = {
     'modify time scale': 1.0,
@@ -30,7 +30,7 @@ folder1.add(panelSettings, 'make single step');
 //Inicilizacija
 function init() {
     //Renderer
-    renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer = new THREE.WebGLRenderer({antialias: true});
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.setSize(window.innerWidth, window.innerHeight);
     document.body.appendChild(renderer.domElement);
@@ -139,14 +139,29 @@ const path = new THREE.LineCurve3(
 );
 const points = path.getPoints(50);
 const geometry = new THREE.BufferGeometry().setFromPoints(points);
-const material = new THREE.LineBasicMaterial( { color: 0xff0000 } );
-const pathObject = new THREE.Line( geometry, material );
+const material = new THREE.LineBasicMaterial({color: "red", opacity: "0.5", transparent: true});
+const pathObject = new THREE.Line(geometry, material);
 scene.add(pathObject);
+
+//Dodajanje strežne točke
+const pointGeometry = new THREE.SphereGeometry(0.05, 15, 15);
+const pointMaterial = new THREE.MeshStandardMaterial({color: "red", opacity: "0.5", transparent: true});
+const servingPoint = new THREE.Mesh(pointGeometry, pointMaterial);
+scene.add(servingPoint);
+servingPoint.position.set(2.5, 0, 0);
+
+//Dodajanje polja pod strežno točko
+const fieldGeometry = new THREE.BoxGeometry(1.1, 1.1, 0.01)
+const fieldMaterial = new THREE.MeshStandardMaterial({color: "red", opacity: "0.5", transparent: true});
+const servingField = new THREE.Mesh(fieldGeometry, fieldMaterial);
+scene.add(servingField);
+servingField.position.set(2.5, 0, -0.49);
 
 //Razred "Product", kateri deduje od razreda "Mesh"
 class Product extends THREE.Mesh{
-    constructor(x, y, productColor, weight, sizeX, sizeY, sizeZ){
+    constructor(serial, x, y, productColor, weight, sizeX, sizeY, sizeZ, serviceTimeRequired){
         super();
+        this.serial = serial;
         this.x = x;
         this.y = y;
         this.productColor = productColor
@@ -154,28 +169,42 @@ class Product extends THREE.Mesh{
         this.sizeX = sizeX;
         this.sizeY = sizeY;
         this.sizeZ = sizeZ;
+        this.serviceTimeRequired = serviceTimeRequired;
         this.positionTime = 0;
         this.moveAmount = 0;
+        this.inService = false;
+        this.inServiceTime = 0;
+        this.inLine = false;
         this.geometry = new THREE.BoxGeometry(sizeX, sizeY, sizeZ);
-        this.material = new THREE.MeshStandardMaterial({color: productColor});
+        this.material = new THREE.MeshStandardMaterial({color: productColor, wireframe: true});
     }
     //Izračun položaja na poti v času
     //Nevem zakaj je odstopanje pri "positionTime", zato zaokrožim
     calculatePosition(){
         this.moveAmount = (speed * speedScale) / path.getLength();
         this.positionTime = (Math.round(this.positionTime * 1e5) / 1e5) + (Math.round(this.moveAmount * 1e5 ) / 1e5);
-        console.log(productArray[0].positionTime)
         return this.positionTime;
     }
 }
 
 render();
 
+function getRandomInt(min, max){
+    min = Math.ceil(min);
+    max = Math.floor(max);
+    return Math.floor(Math.random() * (max - min) + min); // The maximum is exclusive and the minimum is inclusive
+}
+  
 let productArray = [];
 let paused = true;
 let speed = 0.01; //Premik na časovno enoto 0.01m/s
 let counter = 0;
-let spawnInterval = 200;
+let spawnTimer = 0;
+let spawnTime = 0;
+let spawnTimeRecorded = false;
+let serialSetter = 0;
+let serviceOccupied = false;
+let objectsMove = true;
 
 //Funkcija za animiranje
 function animate() {
@@ -183,36 +212,89 @@ function animate() {
     if (paused) return;
     requestAnimationFrame(animate);
 
-    //Dodajanje produktov
-    //Če je vrednost spremenljivke "counter", deljiva s spremenljivko "spawnInterval" je ustvarjen nov produkt.
-    //Z drugimi besedami: vsake "spawnInterval" časa se sceni doda nov produkt
-    //Potrebno dopolnit, ker se pri času z necelimi števili produkti ne pojavljajo
-    if(counter % spawnInterval === 0){
-        const product = new Product(-4.5, -4.5, "green", 40, 1, 1, 1);
-        scene.add(product);
-        productArray.push(product);
+    //Dobimo naključen čas od min do max ob katerem se doda nov produkt
+    if(spawnTimeRecorded == false){
+        spawnTime = getRandomInt(150, 150);
+        spawnTimeRecorded = true;
     }
     
-    //Premiki produktov
+    //Dodajanje produktov
+    if(spawnTimer == spawnTime){
+        const product = new Product(serialSetter, -4.5, -4.5, "green", 40, 1, 1, 1, getRandomInt(150, 150));
+        scene.add(product);
+        productArray.push(product);
+        serialSetter += 1;
+        spawnTimeRecorded = false;
+        spawnTimer = 0;
+    }
+    
     for(var i = 0; i < productArray.length; i++){
-        var cubePosition = productArray[i].calculatePosition();
-        productArray[i].position.x = path.getPoint(cubePosition).x;
-        productArray[i].position.y = path.getPoint(cubePosition).y;
-        productArray[i].position.z = path.getPoint(cubePosition).z;
-        console.log(path.getLength());
-        console.log(productArray[0].moveAmount);
-        console.log(productArray[0].positionTime);
+        //Zaznavanje prihoda na strežno mesto
+        if(productArray[i].position.x  == servingPoint.position.x && productArray[i].position.y == servingPoint.position.y && productArray[i].position.z == servingPoint.position.z){
+            //Beleženje časa objekta v strežbi
+            productArray[i].inServiceTime += (counter/counter) * speedScale;
+            //Zato, da se ta koda izvede samo enkrat
+            if(serviceOccupied == false){
+                productArray[i].inLine = true;
+                productArray[i].inService = true;
+                serviceOccupied = true;
+            }
+        }
+        
+        //Zaznavanje čakanja v vrsti
+        if(productArray[i].inLine == true){
+            try{
+                if(productArray[i+1].position.x >= (productArray[i].position.x - productArray[i].sizeX)){
+                    productArray[i+1].inLine = true;
+                }
+            }
+            catch{
+                console.log("Spawn full!")
+            }
+        }
+        
+        //Konec strežbe oz. objekt ni v strežbi
+        if(speedScale > 0 && productArray[i].inServiceTime == productArray[i].serviceTimeRequired){
+            serviceOccupied = false;
+            //Vsem objektom nastavimo vrednost ".inLine = false". Torej, vsi objekti, ki so bili v vrsti se pomaknejo naprej, dokler eden ne prispe na strežno mesto.
+            productArray.forEach((element) => {
+                element.inLine = false;
+                element.inService = false;
+            });
+        }
 
+        if(speedScale < 0 && productArray[i].inServiceTime == 0){
+            serviceOccupied = false;
+            //Vsem objektom nastavimo vrednost ".inLine = false". Torej, vsi objekti, ki so bili v vrsti se pomaknejo naprej, dokler eden ne prispe na strežno mesto.
+            productArray.forEach((element) => {
+                element.inLine = false;
+                element.inService = false;
+            });
+        }
+        
+        //Premiki produktov
+        if(productArray[i].inLine == false){
+            var cubePosition = productArray[i].calculatePosition();
+            productArray[i].position.x = path.getPoint(cubePosition).x;
+            productArray[i].position.y = path.getPoint(cubePosition).y;
+            productArray[i].position.z = path.getPoint(cubePosition).z;
+        }
+        
+        /*
         //Predmet je odstranjen iz table, ko prečka mejo
         if(productArray[i].position.x > 5){
             scene.remove(productArray[i]);
             productArray.shift();
         }
+        */
+
+        console.log(productArray[i].serial + ": inLine: " + productArray[i].inLine + ", inService: " + productArray[i].inService + ", inServiceTime: " + productArray[i].inServiceTime + ", serviceTimeRequired: " + productArray[i].serviceTimeRequired)
     }
-
-
+    
     //Posodabljanje števca časa
     counter = counter + (1 * speedScale);
+    spawnTimer += (counter/counter) * speedScale;
+
     //Izpis časa
     document.getElementById("counter").innerHTML = counter.toFixed(2);
     /*
