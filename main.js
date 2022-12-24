@@ -7,7 +7,10 @@ import { GUI } from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import Stats from 'three/examples/jsm/libs/stats.module.js';
 (function () { var script = document.createElement('script'); script.onload = function () { var stats = new Stats(); document.body.appendChild(stats.dom); requestAnimationFrame(function loop() { stats.update(); requestAnimationFrame(loop) }); }; script.src = './node_modules/three/examples/jsm/libs/stats.module.js'; document.head.appendChild(script); })()
 
-let camera, scene, renderer, plane, panelSettings;
+let timeBetweenArrivals = [0.4, 1.2, 0.5, 1.7, 0.2, 1.6, 0.2, 1.4, 1.9];
+let serviceTimes = [2, 0.7, 0.2, 1.1, 3.7, 0.6];
+
+let camera, scene, renderer, plane, guiSettings;
 const objects = [];
 
 var speedScale = 1;
@@ -16,16 +19,35 @@ init();
 render();
 
 //GUI - Grafični uporabniški vmesnik
-const panel = new GUI({width: 310});
-const folder1 = panel.addFolder('Pausing/Stepping');
-panelSettings = {
-    'modify time scale': 1.0,
+const gui = new GUI({width: 310});
+
+guiSettings = {
+    'simulationTime': 0,
+    'timeScale': 1,
     'pause/continue': pauseContinue,
-    'make single step': toSingleStepMode,
+    'singleStep': toSingleStepMode,
+    'serviceOcuppied': false,
+    'serverBusy': 0.0,
+    'serverBusyPercent': 0.0,
+    'averageServingTime': 0,
+    'averageWaitingTime': 0,
+    'averageLineLength': 0,
 };
-panel.add(panelSettings, 'modify time scale', -2, 2, 0.1).onFinishChange(modifyTimeScale);
-folder1.add(panelSettings, 'pause/continue');
-folder1.add(panelSettings, 'make single step');
+
+gui.add(guiSettings, 'simulationTime').listen().disable();
+gui.add(guiSettings, 'timeScale', -2, 2, 0.1).onFinishChange(modifyTimeScale);
+
+const folder1 = gui.addFolder('pausing/stepping');
+folder1.add(guiSettings, 'pause/continue');
+folder1.add(guiSettings, 'singleStep');
+
+const folder2 = gui.addFolder('statistics');
+folder2.add(guiSettings, 'serviceOcuppied').listen().disable();
+folder2.add(guiSettings, 'serverBusy').listen().disable();
+folder2.add(guiSettings, 'serverBusyPercent', 0, 1, 0.1).listen().disable();
+folder2.add(guiSettings, 'averageServingTime').listen().disable();
+folder2.add(guiSettings, 'averageWaitingTime').listen().disable();
+folder2.add(guiSettings, 'averageLineLength').listen().disable();
 
 //Inicilizacija
 function init() {
@@ -134,8 +156,8 @@ function modifyTimeScale(speed) {
 
 //Dodajanje poti
 const path = new THREE.LineCurve3(
-	new THREE.Vector3( -5, 0, 0 ),
-	new THREE.Vector3( 5, 0, 0 )
+	new THREE.Vector3(-5, 0, 0),
+	new THREE.Vector3(5, 0, 0)
 );
 const points = path.getPoints(50);
 const geometry = new THREE.BufferGeometry().setFromPoints(points);
@@ -148,20 +170,21 @@ const pointGeometry = new THREE.SphereGeometry(0.05, 15, 15);
 const pointMaterial = new THREE.MeshStandardMaterial({color: "red", opacity: "0.5", transparent: true});
 const servingPoint = new THREE.Mesh(pointGeometry, pointMaterial);
 scene.add(servingPoint);
-servingPoint.position.set(2.5, 0, 0);
 
-//Dodajanje polja pod strežno točko
-const fieldGeometry = new THREE.BoxGeometry(1.1, 1.1, 0.01)
+//Položaj strežnega mesta
+servingPoint.position.set(2, 0, 0);
+
+//Dodajanje označitvenega polja pod strežno točko
+const fieldGeometry = new THREE.BoxGeometry(1.1, 1.1, 0.001)
 const fieldMaterial = new THREE.MeshStandardMaterial({color: "red", opacity: "0.5", transparent: true});
 const servingField = new THREE.Mesh(fieldGeometry, fieldMaterial);
 scene.add(servingField);
-servingField.position.set(2.5, 0, -0.49);
+servingField.position.set(2, 0, -0.499);
 
 //Razred "Product", kateri deduje od razreda "Mesh"
 class Product extends THREE.Mesh{
-    constructor(serial, x, y, productColor, weight, sizeX, sizeY, sizeZ, serviceTimeRequired){
+    constructor(x, y, productColor, weight, speed, sizeX, sizeY, sizeZ, serviceTimeRequired){
         super();
-        this.serial = serial;
         this.x = x;
         this.y = y;
         this.productColor = productColor
@@ -170,10 +193,12 @@ class Product extends THREE.Mesh{
         this.sizeY = sizeY;
         this.sizeZ = sizeZ;
         this.serviceTimeRequired = serviceTimeRequired;
+        this.speed = speed;
         this.positionTime = 0;
         this.moveAmount = 0;
         this.inService = false;
         this.inServiceTime = 0;
+        this.inServiceArea = false;
         this.inLine = false;
         this.geometry = new THREE.BoxGeometry(sizeX, sizeY, sizeZ);
         this.material = new THREE.MeshStandardMaterial({color: productColor, wireframe: true});
@@ -181,8 +206,8 @@ class Product extends THREE.Mesh{
     //Izračun položaja na poti v času
     //Nevem zakaj je odstopanje pri "positionTime", zato zaokrožim
     calculatePosition(){
-        this.moveAmount = (speed * speedScale) / path.getLength();
-        this.positionTime = (Math.round(this.positionTime * 1e5) / 1e5) + (Math.round(this.moveAmount * 1e5 ) / 1e5);
+        this.moveAmount = (this.speed * speedScale) / path.getLength();
+        this.positionTime = Math.round(((this.positionTime + this.moveAmount) + Number.EPSILON) * 1e5) / 1e5;
         return this.positionTime;
     }
 }
@@ -194,111 +219,138 @@ function getRandomInt(min, max){
     max = Math.floor(max);
     return Math.floor(Math.random() * (max - min) + min); // The maximum is exclusive and the minimum is inclusive
 }
-  
+
 let productArray = [];
 let paused = true;
-let speed = 0.01; //Premik na časovno enoto 0.01m/s
+//let speed = 0.01;
 let counter = 0;
 let spawnTimer = 0;
 let spawnTime = 0;
 let spawnTimeRecorded = false;
-let serialSetter = 0;
-let serviceOccupied = false;
-let objectsMove = true;
+let serviceOcuppiedValue = false;
+let serverBusyValue = 0;
 
 //Funkcija za animiranje
 function animate() {
     //V primeru pavze se koda pod spodnjo vrstico ne izvaja
     if (paused) return;
     requestAnimationFrame(animate);
-
+    
+    //Posodabljanje števca časa
+    counter = Math.round((counter + speedScale + Number.EPSILON) * 1e2) / 1e2;
+    
     //Dobimo naključen čas od min do max ob katerem se doda nov produkt
     if(spawnTimeRecorded == false){
-        spawnTime = getRandomInt(150, 150);
+        spawnTime = getRandomInt(0, 0);
         spawnTimeRecorded = true;
     }
     
     //Dodajanje produktov
     if(spawnTimer == spawnTime){
-        const product = new Product(serialSetter, -4.5, -4.5, "green", 40, 1, 1, 1, getRandomInt(150, 150));
+        const product = new Product(-4.5, 0, "green", 40, 0.175, 1, 1, 1, 200);
         scene.add(product);
         productArray.push(product);
-        serialSetter += 1;
         spawnTimeRecorded = false;
-        spawnTimer = 0;
+        //spawnTimer = 0;
     }
     
+    spawnTimer += speedScale;
+    
     for(var i = 0; i < productArray.length; i++){
-        //Zaznavanje prihoda na strežno mesto
-        if(productArray[i].position.x  == servingPoint.position.x && productArray[i].position.y == servingPoint.position.y && productArray[i].position.z == servingPoint.position.z){
-            //Beleženje časa objekta v strežbi
-            productArray[i].inServiceTime += (counter/counter) * speedScale;
-            //Zato, da se ta koda izvede samo enkrat
-            if(serviceOccupied == false){
-                productArray[i].inLine = true;
-                productArray[i].inService = true;
-                serviceOccupied = true;
-            }
+        //Konec strežbe oz. objekt ni v strežbi
+        //Ko je speedScale pozitiven oz. teče čas naprej
+        if(speedScale > 0 && productArray[i].inServiceTime == productArray[i].serviceTimeRequired){
+            productArray[i].inService = false;
+            //Vsem objektom nastavimo vrednost ".inLine = false". Torej, vsi objekti, ki so bili v vrsti se pomaknejo naprej, dokler eden ne prispe na strežno mesto.
+            productArray.forEach((element) => {
+                element.inLine = false;
+            });
         }
         
+        //Ko je speedScale negativen oz. teče čas nazaj
+        if(speedScale < 0 && productArray[i].inServiceTime == 0){
+            productArray[i].inService = false;
+            //Vsem objektom nastavimo vrednost ".inLine = false". Torej, vsi objekti, ki so bili v vrsti se pomaknejo naprej, dokler eden ne prispe na strežno mesto.
+            productArray.forEach((element) => {
+                element.inLine = false;
+            });
+        }
+        
+        /*
+        //Zaznavanje odhoda iz strežnega območja
+        if((servingPoint.position.x >= productArray[i].position.x - (productArray[i].sizeX/2)) || (servingPoint.position.x <= productArray[i].position.x + (productArray[i].sizeX/2))){
+            productArray[i].inServiceArea = false;
+        }
+        */
+        
         //Zaznavanje čakanja v vrsti
+        if(productArray[i].inService == true){
+            productArray[i].inLine = true;
+        }
         if(productArray[i].inLine == true){
             try{
-                if(productArray[i+1].position.x >= (productArray[i].position.x - productArray[i].sizeX)){
+                //Zaznavanje čakanja v vrsti po x in y osi
+                if((productArray[i+1].position.x >= (productArray[i].position.x - productArray[i].sizeX)) && (productArray[i+1].position.x <= (productArray[i].position.x + productArray[i].sizeX)) && (productArray[i+1].position.y >= (productArray[i].position.y - productArray[i].sizeY)) && (productArray[i+1].position.y <= (productArray[i].position.y + productArray[i].sizeY))){
                     productArray[i+1].inLine = true;
                 }
             }
             catch{
-                console.log("Spawn full!")
+                
             }
-        }
-        
-        //Konec strežbe oz. objekt ni v strežbi
-        if(speedScale > 0 && productArray[i].inServiceTime == productArray[i].serviceTimeRequired){
-            serviceOccupied = false;
-            //Vsem objektom nastavimo vrednost ".inLine = false". Torej, vsi objekti, ki so bili v vrsti se pomaknejo naprej, dokler eden ne prispe na strežno mesto.
-            productArray.forEach((element) => {
-                element.inLine = false;
-                element.inService = false;
-            });
-        }
-
-        if(speedScale < 0 && productArray[i].inServiceTime == 0){
-            serviceOccupied = false;
-            //Vsem objektom nastavimo vrednost ".inLine = false". Torej, vsi objekti, ki so bili v vrsti se pomaknejo naprej, dokler eden ne prispe na strežno mesto.
-            productArray.forEach((element) => {
-                element.inLine = false;
-                element.inService = false;
-            });
+            
         }
         
         //Premiki produktov
         if(productArray[i].inLine == false){
             var cubePosition = productArray[i].calculatePosition();
-            productArray[i].position.x = path.getPoint(cubePosition).x;
-            productArray[i].position.y = path.getPoint(cubePosition).y;
-            productArray[i].position.z = path.getPoint(cubePosition).z;
+            productArray[i].position.x = Math.round(((path.getPoint(cubePosition).x) + Number.EPSILON) * 1e3) / 1e3;
+            productArray[i].position.y = Math.round(((path.getPoint(cubePosition).y) + Number.EPSILON) * 1e3) / 1e3;
+            productArray[i].position.z = Math.round(((path.getPoint(cubePosition).z) + Number.EPSILON) * 1e3) / 1e3;
         }
         
-        /*
-        //Predmet je odstranjen iz table, ko prečka mejo
-        if(productArray[i].position.x > 5){
-            scene.remove(productArray[i]);
-            productArray.shift();
+        //Beleženje časa objekta v strežbi
+        if(productArray[i].inService == true){
+            productArray[i].inServiceTime = Math.round((productArray[i].inServiceTime + speedScale + Number.EPSILON) * 1e2) / 1e2;
         }
-        */
-
-        console.log(productArray[i].serial + ": inLine: " + productArray[i].inLine + ", inService: " + productArray[i].inService + ", inServiceTime: " + productArray[i].inServiceTime + ", serviceTimeRequired: " + productArray[i].serviceTimeRequired)
+        
+        //Zaznavanje prihoda na strežno območje (rob objekta prečka sredino točke)
+        if((servingPoint.position.x <= productArray[i].position.x + (productArray[i].sizeX/2)) && (servingPoint.position.x >= productArray[i].position.x - (productArray[i].sizeX/2))){
+            productArray[i].inServiceArea = true;
+        }
+        else{
+            productArray[i].inServiceArea = false;
+        }
+       
+       //Zaznavanje prihoda na strežno točko (sredini objekta in točke se poravnata)
+       if(productArray[i].position.x  == servingPoint.position.x && productArray[i].position.y == servingPoint.position.y && productArray[i].position.z == servingPoint.position.z){
+           productArray[i].inService = true;
+        }
     }
     
-    //Posodabljanje števca časa
-    counter = counter + (1 * speedScale);
-    spawnTimer += (counter/counter) * speedScale;
+    //Beleženja časa zasedenosti strežnega mesta
+    //V primeru, da ima katerikoli objekt v tabeli productArray vrednost inServiceArea = true, bo tudi serviceOcuppiedValue = true
+    if(productArray.some(e => e.inServiceArea === true)){
+        serviceOcuppiedValue = true;
+        serverBusyValue += speedScale;
+    }
+    else{
+        serviceOcuppiedValue = false;
+    }
 
-    //Izpis časa
-    document.getElementById("counter").innerHTML = counter.toFixed(2);
+    //Seštevek časov strežbe
+    const sumServiceTime = productArray.reduce(
+        (accumulator, currentValue) => accumulator + currentValue.serviceTimeRequired,
+        0,
+    );
+    
+    //Izpis vrednosti na GUI
+    guiSettings.simulationTime = counter;
+    guiSettings.serviceOcuppied = serviceOcuppiedValue;
+    guiSettings.serverBusy = serverBusyValue;
+    guiSettings.serverBusyPercent = Math.round((serverBusyValue/counter + Number.EPSILON) * 1e2) / 1e2;
+    guiSettings.averageServingTime = sumServiceTime/productArray.length;
     /*
     document.getElementById("coords").innerHTML = "x: " + (productArray[0].position.x).toFixed(2) + ", y: " + (productArray[0].position.y).toFixed(2) + ", z: " + (productArray[0].position.z).toFixed(2);
     */
-    render();
+   render();
 }
